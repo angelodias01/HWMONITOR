@@ -1,0 +1,173 @@
+import time
+import csv
+import psutil
+import wmi
+import serial
+import os
+from pynvml import (
+    nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetTemperature,
+    nvmlDeviceGetUtilizationRates, nvmlDeviceGetMemoryInfo,
+    nvmlDeviceGetName, nvmlShutdown, nvmlDeviceGetCount
+)
+
+# Inicializa a NVIDIA NVML para obter dados da GPU
+nvmlInit()
+
+w = wmi.WMI(namespace=r"root\OpenHardwareMonitor")
+
+log_file = r"C:\Users\olegn\Documents\HWMonitor\HWMonitor\hardware_log.csv"
+
+# Criar pasta se não existir
+log_dir = os.path.dirname(log_file)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# Criar o cabeçalho do CSV se o arquivo ainda não existir
+if not os.path.exists(log_file):
+    try:
+        with open(log_file, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["Timestamp", "CPU Package Temp (°C)", "CPU Usage (%)", "CPU Clock Speed (MHz)",
+                             "GPU Name", "GPU Temp (°C)", "GPU Usage (%)", "GPU Memory Usage (MB)",
+                             "RAM Usage (%)", "Total RAM (MB)", "TempAirIn (°C)", "TempAirOut (°C)"])
+    except Exception as e:
+        print(f"Erro ao criar o arquivo CSV: {e}")
+        exit()
+
+# Tentar abrir a porta serial
+try:
+    ser = serial.Serial('COM5', 9600, timeout=1)
+except serial.SerialException as e:
+    print(f"Erro ao abrir a porta serial COM5: {e}")
+    exit()
+
+print("Monitoramento iniciado. Dados sendo salvos em:", log_file)
+
+time.sleep(2)
+
+def ler_temperaturas():
+    linha = ser.readline().decode('utf-8').strip()  # Lê a linha enviada pelo Arduino
+    if linha.startswith("TEMP1:"):
+        # Extrai as temperaturas dos sensores
+        temp1 = float(linha.split("\t")[0].split(":")[1])  # TempAirIn
+        temp2 = float(linha.split("\t")[1].split(":")[1])  # TempAirOut
+        return temp1, temp2
+    return None, None
+
+# Função para obter a temperatura do CPU Package
+def get_cpu_package_temperature():
+    for sensor in w.Sensor():
+        if sensor.SensorType == "Temperature" and "CPU Package" in sensor.Name:
+            return int(sensor.Value)
+    return None
+
+# Função para obter a média dos clocks da CPU
+def get_cpu_clock_speed():
+    sensors = w.Sensor()
+    cpu_clocks = [s.Value for s in sensors if s.SensorType == "Clock" and "CPU Core" in s.Name]
+    
+    if cpu_clocks:
+        return int(sum(cpu_clocks) / len(cpu_clocks))  # Sem casas decimais
+
+    else:
+        cpu_freq_info = psutil.cpu_freq()
+        return cpu_freq_info.current if cpu_freq_info else "N/A"  # Alternativa com psutil
+
+# Função para obter dados da GPU
+def get_gpu_data():
+    gpu_count = nvmlDeviceGetCount()
+    gpu_data = []
+    
+    for i in range(gpu_count):
+        try:
+            gpu_handle = nvmlDeviceGetHandleByIndex(i)
+            gpu_name = nvmlDeviceGetName(gpu_handle)
+            gpu_abbr_name = f"GPU {i} ({gpu_name.split()[0]})"
+            gpu_temp = int(nvmlDeviceGetTemperature(gpu_handle, 0))
+            gpu_utilization = int(nvmlDeviceGetUtilizationRates(gpu_handle).gpu)
+            gpu_memory = int(nvmlDeviceGetMemoryInfo(gpu_handle).used / (1024 ** 2))
+            
+            gpu_data.append({
+                'name': gpu_abbr_name,
+                'temperature': gpu_temp,
+                'utilization': gpu_utilization,
+                'memory': gpu_memory
+            })
+        except Exception as e:
+            print(f"Erro ao obter dados da GPU {i}: {e}")
+            gpu_data.append({
+                'name': f"GPU {i}",
+                'temperature': "N/A",
+                'utilization': "N/A",
+                'memory': "N/A"
+            })
+    
+    return gpu_data
+
+# Loop principal de monitoramento
+try:
+    while True:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        cpu_usage = psutil.cpu_percent()
+        ram_usage = int(psutil.virtual_memory().percent)
+        total_ram = int(psutil.virtual_memory().total / (1024 ** 2))  # Convertendo para MB
+
+        # Obter a frequência da CPU
+        cpu_freq = get_cpu_clock_speed()
+
+        # Obter a temperatura do pacote da CPU
+        cpu_package_temp = get_cpu_package_temperature()
+        if cpu_package_temp is None:
+            print("Não foi possível obter a temperatura do CPU Package.")
+            cpu_package_temp = "N/A"
+
+        # Obter dados da GPU
+        gpu_data = get_gpu_data()
+
+        # Ler as temperaturas do Arduino
+        temp_air_in, temp_air_out = ler_temperaturas()
+
+        if temp_air_in is None or temp_air_out is None:
+            print("Erro ao ler as temperaturas do Arduino.")
+            temp_air_in = "N/A"
+            temp_air_out = "N/A"
+
+        # Organiza os dados para o CSV
+        for gpu in gpu_data:
+            data_row = [timestamp, cpu_package_temp, cpu_usage, cpu_freq,
+                        gpu['name'], gpu['temperature'], gpu['utilization'],
+                        gpu['memory'], ram_usage, total_ram, temp_air_in, temp_air_out]
+
+            # Salvar dados no arquivo CSV
+            try:
+                with open(log_file, mode="a", newline="") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(data_row)
+                    file.flush()
+            except Exception as e:
+                print(f"Erro ao escrever no arquivo CSV: {e}")
+
+            # Enviar dados via serial
+            data_to_send = f"{timestamp}\t{cpu_package_temp}°C\t{cpu_usage}%\t{cpu_freq} MHz\t{gpu['name']}\t{gpu['temperature']}°C\t{gpu['utilization']}%\t{gpu['memory']} MB\t{ram_usage}%\t{total_ram} MB\t{temp_air_in}°C\t{temp_air_out}°C\n"
+            
+            try:
+                ser.write(data_to_send.encode())
+            except Exception as e:
+                print(f"Erro ao enviar dados via serial: {e}")
+
+        # Exibir informações no console
+        gpu_display = " | ".join([f"{gpu['name']} | Temp: {gpu['temperature']}°C | Uso: {gpu['utilization']}% | Mem: {gpu['memory']} MB" for gpu in gpu_data])
+
+        print(f"{timestamp} | CPU Temp: {cpu_package_temp}°C | CPU Uso: {cpu_usage}% | CPU Clock: {cpu_freq} MHz | {gpu_display} | RAM Uso: {ram_usage}% | Total RAM: {total_ram} MB | TempAirIn: {temp_air_in}°C | TempAirOut: {temp_air_out}°C")
+
+        # Pequena pausa antes da próxima medição
+        time.sleep(2)
+
+except KeyboardInterrupt:
+    print("Monitoramento interrompido.")
+
+finally:
+    nvmlShutdown()
+    if ser.is_open:
+        ser.close()
+        print("Porta serial fechada com sucesso!")
