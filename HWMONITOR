@@ -1,0 +1,146 @@
+import time
+import csv
+import psutil
+import wmi
+import serial
+import os
+from pynvml import (
+    nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetTemperature,
+    nvmlDeviceGetUtilizationRates, nvmlDeviceGetMemoryInfo,
+    nvmlDeviceGetName, nvmlShutdown, nvmlDeviceGetCount
+)
+
+# Initialize NVIDIA NVML to retrieve GPU data
+nvmlInit()
+w = wmi.WMI(namespace=r"root\OpenHardwareMonitor")
+log_file = r"C:\Users\olegn\Documents\HWMonitor\HWMonitor\hardware_log.csv"
+
+# Create directory if it does not exist
+log_dir = os.path.dirname(log_file)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# Create CSV header if the file does not exist
+if not os.path.exists(log_file):
+    try:
+        with open(log_file, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["Timestamp", "CPU Package Temp (°C)", "CPU Usage (%)", "CPU Clock Speed (MHz)",
+                             "GPU Name", "GPU Temp (°C)", "GPU Usage (%)", "GPU Memory Usage (MB)",
+                             "RAM Usage (%)", "Total RAM (MB)", "TempAirIn (°C)", "TempAirOut (°C)"])
+    except Exception as e:
+        print(f"Error creating CSV file: {e}")
+        exit()
+
+# Attempt to open the serial port
+try:
+    ser = serial.Serial('COM5', 9600, timeout=1)
+except serial.SerialException as e:
+    print(f"Error opening serial port COM5: {e}")
+    exit()
+
+print("Monitoring started. Data is being saved to:", log_file)
+
+time.sleep(2)
+
+# Function to read temperatures from Arduino
+def read_temperatures():
+    line = ser.readline().decode('utf-8').strip()
+    if line.startswith("TEMP1:"):
+        temp1 = float(line.split("\t")[0].split(":")[1])
+        temp2 = float(line.split("\t")[1].split(":")[1])
+        return temp1, temp2
+    return None, None
+
+# Function to get CPU package temperature
+def get_cpu_package_temperature():
+    for sensor in w.Sensor():
+        if sensor.SensorType == "Temperature" and "CPU Package" in sensor.Name:
+            return int(sensor.Value)
+    return None
+
+# Function to get average CPU clock speed
+def get_cpu_clock_speed():
+    sensors = w.Sensor()
+    cpu_clocks = [s.Value for s in sensors if s.SensorType == "Clock" and "CPU Core" in s.Name]
+    
+    if cpu_clocks:
+        return int(sum(cpu_clocks) / len(cpu_clocks))
+    else:
+        cpu_freq_info = psutil.cpu_freq()
+        return cpu_freq_info.current if cpu_freq_info else "N/A"
+
+# Function to get GPU data
+def get_gpu_data():
+    gpu_count = nvmlDeviceGetCount()
+    gpu_data = []
+    
+    for i in range(gpu_count):
+        try:
+            gpu_handle = nvmlDeviceGetHandleByIndex(i)
+            gpu_name = nvmlDeviceGetName(gpu_handle)
+            gpu_abbr_name = f"GPU {i} ({gpu_name.split()[0]})"
+            gpu_temp = int(nvmlDeviceGetTemperature(gpu_handle, 0))
+            gpu_utilization = int(nvmlDeviceGetUtilizationRates(gpu_handle).gpu)
+            gpu_memory = int(nvmlDeviceGetMemoryInfo(gpu_handle).used / (1024 ** 2))
+            
+            gpu_data.append({
+                'name': gpu_abbr_name,
+                'temperature': gpu_temp,
+                'utilization': gpu_utilization,
+                'memory': gpu_memory
+            })
+        except Exception as e:
+            print(f"Error retrieving data from GPU {i}: {e}")
+            gpu_data.append({
+                'name': f"GPU {i}",
+                'temperature': "N/A",
+                'utilization': "N/A",
+                'memory': "N/A"
+            })
+    
+    return gpu_data
+
+# Main monitoring loop
+try:
+    while True:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        cpu_usage = psutil.cpu_percent()
+        ram_usage = int(psutil.virtual_memory().percent)
+        total_ram = int(psutil.virtual_memory().total / (1024 ** 2))
+        cpu_freq = get_cpu_clock_speed()
+        cpu_package_temp = get_cpu_package_temperature() or "N/A"
+        gpu_data = get_gpu_data()
+        temp_air_in, temp_air_out = read_temperatures() or ("N/A", "N/A")
+
+        for gpu in gpu_data:
+            data_row = [timestamp, cpu_package_temp, cpu_usage, cpu_freq,
+                        gpu['name'], gpu['temperature'], gpu['utilization'],
+                        gpu['memory'], ram_usage, total_ram, temp_air_in, temp_air_out]
+            try:
+                with open(log_file, mode="a", newline="") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(data_row)
+                    file.flush()
+            except Exception as e:
+                print(f"Error writing to CSV file: {e}")
+            
+            data_to_send = f"{timestamp}\t{cpu_package_temp}°C\t{cpu_usage}%\t{cpu_freq} MHz\t{gpu['name']}\t{gpu['temperature']}°C\t{gpu['utilization']}%\t{gpu['memory']} MB\t{ram_usage}%\t{total_ram} MB\t{temp_air_in}°C\t{temp_air_out}°C\n"
+            
+            try:
+                ser.write(data_to_send.encode())
+            except Exception as e:
+                print(f"Error sending data via serial: {e}")
+
+        gpu_display = " | ".join([f"{gpu['name']} | Temp: {gpu['temperature']}°C | Usage: {gpu['utilization']}% | Mem: {gpu['memory']} MB" for gpu in gpu_data])
+        print(f"{timestamp} | CPU Temp: {cpu_package_temp}°C | CPU Usage: {cpu_usage}% | CPU Clock: {cpu_freq} MHz | {gpu_display} | RAM Usage: {ram_usage}% | Total RAM: {total_ram} MB | TempAirIn: {temp_air_in}°C | TempAirOut: {temp_air_out}°C")
+        time.sleep(2)
+
+except KeyboardInterrupt:
+    print("Monitoring interrupted.")
+
+finally:
+    nvmlShutdown()
+    if ser.is_open:
+        ser.close()
+        print("Serial port closed successfully!")
