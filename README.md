@@ -1,76 +1,98 @@
-HWMonitor
+# HWMonitor Project
 
-Overview
+## Overview
 
-HWMonitor is a Python-based hardware monitoring tool that records and logs system parameters such as CPU temperature, usage, clock speed, GPU performance, RAM usage, and external temperature readings from a serial device (e.g., an Arduino-based sensor). The collected data is stored in a CSV file for later analysis and can also be transmitted via a serial port.
+**HWMonitor** is a Python-based hardware monitoring tool designed to track and log critical system parameters in real-time. It is ideal for system administrators, developers, and hardware enthusiasts who need to monitor system performance, diagnose issues, or analyze hardware behavior over time.
 
-Features
+The tool collects data such as CPU temperature, usage, clock speed, GPU performance, RAM usage, and external temperature readings from a serial device (e.g., an Arduino-based sensor). The collected data is stored in a CSV file for later analysis and can also be transmitted via a serial port for real-time monitoring.
 
-Logs CPU temperature, usage, and clock speed
+---
 
-Monitors multiple GPUs, capturing temperature, utilization, and memory usage
+## Key Features
 
-Tracks RAM usage and total available memory
+- **CPU Monitoring**:
+  - Logs CPU package temperature.
+  - Tracks CPU usage (percentage).
+  - Monitors CPU clock speed (MHz).
 
-Reads external temperature sensors connected via a serial port (e.g., Arduino)
+- **GPU Monitoring**:
+  - Supports multiple NVIDIA GPUs.
+  - Captures GPU temperature, utilization (%), and memory usage (MB).
 
-Saves all collected data in a CSV file
+- **RAM Monitoring**:
+  - Tracks RAM usage (percentage).
+  - Logs total available memory (MB).
 
-Prerequisites
+- **External Sensors**:
+  - Reads external temperature sensors connected via a serial port (e.g., Arduino).
+  - Supports custom sensor configurations.
 
-Before running HWMonitor, ensure that the following dependencies are installed:
+- **Data Logging**:
+  - Saves all collected data in a CSV file for easy analysis.
+  - Real-time data is printed to the console.
 
-pip install psutil wmi pyserial pynvml
+- **Serial Communication**:
+  - Sends monitoring data via serial communication to external devices (optional).
 
-Additionally, you must have:
+---
 
-Open Hardware Monitor installed and running (needed for CPU temperature readings)
+## Use Cases
 
-An NVIDIA GPU (for GPU monitoring via pynvml)
+- **System Performance Monitoring**:
+  - Track CPU, GPU, and RAM usage to identify bottlenecks or performance issues.
 
-An external temperature sensor connected via a serial port (optional)
+- **Hardware Diagnostics**:
+  - Monitor temperatures and usage to detect overheating or hardware failures.
 
-Setup
+- **Environmental Monitoring**:
+  - Use external sensors to monitor air intake and exhaust temperatures in server rooms or other environments.
 
-Clone or download the HWMonitor project to your local machine.
+- **Data Analysis**:
+  - Analyze logged data over time to identify trends or optimize system performance.
 
-Ensure Open Hardware Monitor is running in the background.
+---
 
-If using an external temperature sensor, connect it to the appropriate serial port.
+## Requirements
 
-Modify log_file in the script to specify the desired CSV output location.
+- **Python Libraries**:
+  - `psutil`, `wmi`, `pyserial`, and `pynvml` must be installed.
 
-Update the serial port (COM5 by default) if necessary.
+- **Open Hardware Monitor**:
+  - Required for CPU temperature readings. Must be running in the background.
 
-Usage
+- **NVIDIA GPU**:
+  - Required for GPU monitoring using the `pynvml` library.
 
-Run the script using:
+- **External Temperature Sensor (Optional)**:
+  - Connect an Arduino or similar device with a temperature sensor to a serial port.
 
-python hwmonitor.py
+---
 
-Press Ctrl + C to stop monitoring.
+## Output
 
-Output
+- **CSV File**:
+  - All collected data is saved in a CSV file (`hardware_log.csv` by default) for easy analysis.
 
-The script prints real-time monitoring data to the console.
+- **Real-Time Console Output**:
+  - Real-time monitoring data is printed to the console for immediate feedback.
 
-Data is saved in a CSV file (hardware_log.csv) for analysis.
+- **Serial Communication (Optional)**:
+  - Monitoring data can be sent to external devices via serial communication.
 
-If a serial device is connected, the script sends monitoring data via serial communication.
+---
 
-Example Log Entry
+## Example Use Case
 
-Timestamp, CPU Package Temp (°C), CPU Usage (%), CPU Clock Speed (MHz), GPU Name, GPU Temp (°C), GPU Usage (%), GPU Memory Usage (MB), RAM Usage (%), Total RAM (MB), TempAirIn (°C), TempAirOut (°C)
-2025-02-08 12:00:00, 65, 30, 3200, GPU 0 (RTX 3080), 70, 40, 5000, 45, 16384, 25, 30
+Imagine you are managing a server room and want to ensure that your systems are running within safe temperature ranges. HWMonitor can log CPU and GPU temperatures, RAM usage, and external air temperatures. If temperatures exceed safe thresholds, you can take corrective action before hardware damage occurs.
 
-Troubleshooting
+---
 
-Error opening serial port: Ensure the correct port is set (COM5 by default) and that no other applications are using it.
+## License
 
-No CPU temperature data: Verify that Open Hardware Monitor is running and properly configured.
+This project is open-source and available under the **MIT License**. Feel free to modify, distribute, and use it for personal or commercial purposes.
 
-No GPU data: Ensure an NVIDIA GPU is installed and that the pynvml library is functioning correctly.
+---
 
-License
+## Get Started
 
-This project is open-source and available under the MIT License.
+To get started with HWMonitor, clone or download the project, install the required dependencies, and run the script. For detailed setup and usage instructions, refer to the full documentation.
