@@ -25,9 +25,12 @@ if not os.path.exists(log_file):
     try:
         with open(log_file, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Timestamp", "CPU Package Temp (°C)", "CPU Usage (%)", "CPU Clock Speed (MHz)",
-                             "GPU Name", "GPU Temp (°C)", "GPU Usage (%)", "GPU Memory Usage (MB)",
-                             "RAM Usage (%)", "Total RAM (MB)", "TempAirIn (°C)", "TempAirOut (°C)"])
+            writer.writerow([
+                "Timestamp", "CPU Package Temp (°C)", "CPU Usage (%)", "CPU Clock Speed (MHz)",
+                "GPU Name", "GPU Temp (°C)", "GPU Usage (%)", "GPU Memory Usage (MB)",
+                "RAM Usage (%)", "Total RAM (MB)", "AirIn Temp (°C)", "AirRadiator Temp (°C)",
+                "AirCase Temp (°C)", "AirPowerSupply Temp (°C)"
+            ])
     except Exception as e:
         print(f"Error creating CSV file: {e}")
         exit()
@@ -46,11 +49,13 @@ time.sleep(2)
 # Function to read temperatures from Arduino
 def read_temperatures():
     line = ser.readline().decode('utf-8').strip()
-    if line.startswith("TEMP1:"):
+    if line.startswith("AirIn:"):
         temp1 = float(line.split("\t")[0].split(":")[1])
         temp2 = float(line.split("\t")[1].split(":")[1])
-        return temp1, temp2
-    return None, None
+        temp3 = float(line.split("\t")[2].split(":")[1])
+        temp4 = float(line.split("\t")[3].split(":")[1])
+        return temp1, temp2, temp3, temp4
+    return None, None, None, None
 
 # Function to get CPU package temperature
 def get_cpu_package_temperature():
@@ -111,12 +116,12 @@ try:
         cpu_freq = get_cpu_clock_speed()
         cpu_package_temp = get_cpu_package_temperature() or "N/A"
         gpu_data = get_gpu_data()
-        temp_air_in, temp_air_out = read_temperatures() or ("N/A", "N/A")
+        temp_air_in, temp_air_radiator, temp_air_case, temp_air_power_supply = read_temperatures() or ("N/A", "N/A", "N/A", "N/A")
 
         for gpu in gpu_data:
             data_row = [timestamp, cpu_package_temp, cpu_usage, cpu_freq,
                         gpu['name'], gpu['temperature'], gpu['utilization'],
-                        gpu['memory'], ram_usage, total_ram, temp_air_in, temp_air_out]
+                        gpu['memory'], ram_usage, total_ram, temp_air_in, temp_air_radiator, temp_air_case, temp_air_power_supply]
             try:
                 with open(log_file, mode="a", newline="") as file:
                     writer = csv.writer(file)
@@ -125,7 +130,7 @@ try:
             except Exception as e:
                 print(f"Error writing to CSV file: {e}")
             
-            data_to_send = f"{timestamp}\t{cpu_package_temp}°C\t{cpu_usage}%\t{cpu_freq} MHz\t{gpu['name']}\t{gpu['temperature']}°C\t{gpu['utilization']}%\t{gpu['memory']} MB\t{ram_usage}%\t{total_ram} MB\t{temp_air_in}°C\t{temp_air_out}°C\n"
+            data_to_send = f"{timestamp}\t{cpu_package_temp}°C\t{cpu_usage}%\t{cpu_freq} MHz\t{gpu['name']}\t{gpu['temperature']}°C\t{gpu['utilization']}%\t{gpu['memory']} MB\t{ram_usage}%\t{total_ram} MB\t{temp_air_in}°C\t{temp_air_radiator}°C\t{temp_air_case}°C\t{temp_air_power_supply}°C\n"
             
             try:
                 ser.write(data_to_send.encode())
@@ -133,7 +138,7 @@ try:
                 print(f"Error sending data via serial: {e}")
 
         gpu_display = " | ".join([f"{gpu['name']} | Temp: {gpu['temperature']}°C | Usage: {gpu['utilization']}% | Mem: {gpu['memory']} MB" for gpu in gpu_data])
-        print(f"{timestamp} | CPU Temp: {cpu_package_temp}°C | CPU Usage: {cpu_usage}% | CPU Clock: {cpu_freq} MHz | {gpu_display} | RAM Usage: {ram_usage}% | Total RAM: {total_ram} MB | TempAirIn: {temp_air_in}°C | TempAirOut: {temp_air_out}°C")
+        print(f"{timestamp} | CPU Temp: {cpu_package_temp}°C | CPU Usage: {cpu_usage}% | CPU Clock: {cpu_freq} MHz | {gpu_display} | RAM Usage: {ram_usage}% | Total RAM: {total_ram} MB | AirIn Temp: {temp_air_in}°C | AirRadiator Temp: {temp_air_radiator}°C | AirCase Temp: {temp_air_case}°C | AirPowerSupply Temp: {temp_air_power_supply}°C")
         time.sleep(2)
 
 except KeyboardInterrupt:
