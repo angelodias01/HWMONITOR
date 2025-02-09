@@ -1,55 +1,56 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// Define the sensor pins
-const int sensorPins[] = {A0, A1, A2, A3};
-const char* sensorNames[] = {
-    "Air Intake", 
-    "Radiator", 
-    "Enclosure", 
-    "Power Supply"
-};
-const int numSensors = sizeof(sensorPins) / sizeof(sensorPins[0]);
+// Number of sensors
+#define ONE_WIRE_BUS_COUNT 4
 
-// OneWire and DallasTemperature objects for each sensor
-OneWire* oneWire[numSensors];
-DallasTemperature* sensors[numSensors];
+// Sensor pin assignments
+int oneWirePins[ONE_WIRE_BUS_COUNT] = {A0, A1, A2, A3};
+
+// Arrays to hold OneWire and DallasTemperature objects
+OneWire* oneWire[ONE_WIRE_BUS_COUNT];
+DallasTemperature* sensors[ONE_WIRE_BUS_COUNT];
 
 void setup() {
-    Serial.begin(9600);
-
-    // Initialize sensors
-    for (int i = 0; i < numSensors; i++) {
-        oneWire[i] = new OneWire(sensorPins[i]);
-        sensors[i] = new DallasTemperature(oneWire[i]);
-        sensors[i]->begin();
-    }
+  Serial.begin(9600);  // Initialize serial communication
+  
+  // Initialize sensors
+  for (int i = 0; i < ONE_WIRE_BUS_COUNT; i++) {
+    oneWire[i] = new OneWire(oneWirePins[i]);
+    sensors[i] = new DallasTemperature(oneWire[i]);
+    sensors[i]->begin();
+  }
 }
 
 void loop() {
-    Serial.println("\nReading temperatures...");
+  // Request temperature readings
+  for (int i = 0; i < ONE_WIRE_BUS_COUNT; i++) {
+    sensors[i]->requestTemperatures();
+  }
 
-    // Request temperature readings from all sensors
-    for (int i = 0; i < numSensors; i++) {
-        sensors[i]->requestTemperatures();
+  // Read and transmit temperature data
+  for (int i = 0; i < ONE_WIRE_BUS_COUNT; i++) {
+    float temp = sensors[i]->getTempCByIndex(0);
+    
+    // Send data with labels
+    if (i == 0) {
+      Serial.print("AirIn:");
+    } else if (i == 1) {
+      Serial.print("AirRadiator:");
+    } else if (i == 2) {
+      Serial.print("AirCase:");
+    } else if (i == 3) {
+      Serial.print("AirPowerSupply:");
     }
-
-    // Read and print temperatures
-    for (int i = 0; i < numSensors; i++) {
-        float temperature = sensors[i]->getTempCByIndex(0);
-
-        Serial.print(sensorNames[i]);
-        Serial.print(": ");
-
-        // Check if the reading is valid
-        if (temperature == DEVICE_DISCONNECTED_C) {
-            Serial.println("ERROR (Sensor Disconnected)");
-        } else {
-            Serial.print(temperature);
-            Serial.println(" °C");
-        }
+    Serial.print(temp);
+    
+    // Format output
+    if (i != ONE_WIRE_BUS_COUNT - 1) {
+      Serial.print("\t");
+    } else {
+      Serial.println();
     }
+  }
 
-    Serial.println("----------------------");
-    delay(2000); // Wait before the next reading cycle
+  delay(1000);  // Wait 1 second before next loop
 }
