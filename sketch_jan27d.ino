@@ -1,55 +1,55 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// Define os pinos dos sensores
+// Define the sensor pins
 const int sensorPins[] = {A0, A1, A2, A3};
-const char* sensorNomes[] = {
-    "Entrada de Ar", 
-    "Radiador", 
-    "Caixa", 
-    "Fonte de Alimentação"
+const char* sensorNames[] = {
+    "Air Intake", 
+    "Radiator", 
+    "Enclosure", 
+    "Power Supply"
 };
-const int numSensores = sizeof(sensorPins) / sizeof(sensorPins[0]);
+const int numSensors = sizeof(sensorPins) / sizeof(sensorPins[0]);
 
-// Objetos OneWire e DallasTemperature
-OneWire* oneWire[numSensores];
-DallasTemperature* sensores[numSensores];
+// OneWire and DallasTemperature objects for each sensor
+OneWire* oneWire[numSensors];
+DallasTemperature* sensors[numSensors];
 
 void setup() {
     Serial.begin(9600);
-    
-    // Inicializa os sensores
-    for (int i = 0; i < numSensores; i++) {
+
+    // Initialize sensors
+    for (int i = 0; i < numSensors; i++) {
         oneWire[i] = new OneWire(sensorPins[i]);
-        sensores[i] = new DallasTemperature(oneWire[i]);
-        sensores[i]->begin();
+        sensors[i] = new DallasTemperature(oneWire[i]);
+        sensors[i]->begin();
     }
 }
 
 void loop() {
-    Serial.println("\nLendo temperaturas...");
+    Serial.println("\nReading temperatures...");
 
-    // Solicita a leitura de todos os sensores
-    for (int i = 0; i < numSensores; i++) {
-        sensores[i]->requestTemperatures();
+    // Request temperature readings from all sensors
+    for (int i = 0; i < numSensors; i++) {
+        sensors[i]->requestTemperatures();
     }
 
-    // Lê e imprime as temperaturas
-    for (int i = 0; i < numSensores; i++) {
-        float temperatura = sensores[i]->getTempCByIndex(0);
+    // Read and print temperatures
+    for (int i = 0; i < numSensors; i++) {
+        float temperature = sensors[i]->getTempCByIndex(0);
 
-        // Verifica se a leitura é válida
-        Serial.print(sensorNomes[i]);
+        Serial.print(sensorNames[i]);
         Serial.print(": ");
 
-        if (temperatura == DEVICE_DISCONNECTED_C) {
-            Serial.println("ERRO (Sensor desconectado)");
+        // Check if the reading is valid
+        if (temperature == DEVICE_DISCONNECTED_C) {
+            Serial.println("ERROR (Sensor Disconnected)");
         } else {
-            Serial.print(temperatura);
+            Serial.print(temperature);
             Serial.println(" °C");
         }
     }
 
     Serial.println("----------------------");
-    delay(2000);
+    delay(2000); // Wait before the next reading cycle
 }
